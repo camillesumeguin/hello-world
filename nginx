@@ -1,0 +1,1709 @@
+#Global parameters
+worker_processes  auto;
+
+pid        logs/nginx.pid;
+
+events {
+}
+
+http {
+    ##################### Protocole Configuration #####################
+    proxy_http_version  1.1;
+    include             mime.types;
+    default_type        application/octet-stream;
+    sendfile            off;
+    tcp_nopush          on;
+    tcp_nodelay         on;
+    gzip                on;
+    gzip_proxied           any;
+    gzip_types          text/css application/javascript text/plain text/javascript;
+    gzip_vary      on;
+    gzip_comp_level     6;
+#    proxy_connect_timeout 1200;
+#    proxy_send_timeout 1200;
+#    proxy_read_timeout 1200;
+#    send_timeout 1200;
+
+    ##################### !Protocole Configuration #####################
+
+
+    ##################### UPSTREAM SERVERS #####################
+    #Keep Alive on SSL connections
+    upstream psaportal_gofluent_com {
+      server psaportal.gofluent.com:80;
+      keepalive 10;
+    }
+
+        upstream timportal_gofluent_com {
+      server timportal.gofluent.com:80;
+      keepalive 10;
+    }
+
+    upstream portal_gofluent_com {
+      server portal.gofluent.com:80;
+      keepalive 10;
+    }
+
+        upstream trainers_gofluent_com {
+      server trainers.gofluent.com:80;
+      keepalive 10;
+    }
+
+    upstream resources_gofluent_com {
+      server resources.gofluent.com:80;
+      keepalive 10;
+    }
+
+    upstream scheduler_gofluent_com {
+      server scheduler.gofluent.com:80;
+      keepalive 10;
+    }
+
+    upstream www_gofluent_com {
+       # Call local server that goes through the vpn and decompresses the responses
+       server gofluent.com:80;
+    }
+
+    #Websocket configurations
+
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        '' close;
+    }
+
+    upstream websocket {
+      server classroom.gofluent.com;
+      keepalive 10;
+    }
+    ##################### !UPSTREAM SERVERS #####################
+
+    ##################### CACHE STORAGE CONFIGURATION #####################
+    proxy_cache_path    /var/www/cache levels=1:2 keys_zone=my-cache:1000m max_size=1000m inactive=600m;
+    proxy_temp_path     /var/www/cache/tmp;
+    proxy_cache_revalidate on;
+    ##################### !CACHE STORAGE CONFIGURATION #####################
+
+         log_format main '$remote_addr [$time_local] $request_time $status $body_bytes_sent '
+                        '$upstream_cache_status "$host" "$request"  "$http_referer" "$http_user_agent" $request_time'
+                        ' cookie_CLIENTINFO: set_cookie=$sent_http_set_cookie cookieJSESSIONID=$cookie_JSESSIONID cookieID=$cookie_ID cookieLOGIN=$cookie_LOGIN';
+
+    server {
+        access_log /usr/local/nginx/logs/access_443.log main;
+        error_log /usr/local/nginx/logs/error_443.log;
+        client_max_body_size 0;
+        client_body_buffer_size 100m;
+        #####################  SERVER CONFIGURATION #####################
+        listen                      443 ssl;
+        ssl_protocols               TLSv1 TLSv1.1 TLSv1.2 SSLv2;
+        ssl_certificate             ssl/www_gofluent_com.pem;
+        ssl_certificate_key         ssl/www_gofluent_com.key;
+        ssl_session_cache           shared:SSL:1m;
+        ssl_ciphers                 HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers   on;
+        ssl_verify_client           off;
+        #####################  !SERVER CONFIGURATION #####################
+
+        ##################### HEADER REWRITING #####################
+        #Debug trace for cache control
+        more_set_headers        "X-Cache: $upstream_cache_status";
+        #Useless headers cleaning
+        proxy_hide_header       url-regex-pattern;
+        proxy_hide_header       filter-class;
+        more_clear_headers      'Server';
+        #Proxy server configurations
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header        Connection "";
+        proxy_set_header        accept-encoding "";
+        proxy_hide_header       X-Powered-By;
+        proxy_hide_header       Pragma;
+        proxy_hide_header       Vary;
+        proxy_intercept_errors  on;
+        proxy_ignore_client_abort on;
+        ##################### !HEADER REWRITING #####################
+
+        ##################### UPSTREAM HEADER REWRITING #####################
+        more_set_input_headers        "accept-encoding: none";
+        ##################### !UPSTREAM HEADER REWRITING #####################
+        if ($host = 'www.gofluent.com') {
+        rewrite  ^/(.*)$  https://www.gofluent.com$request_uri? permanent;
+    }
+        if ($host = 'gofluent.com') {
+        rewrite  ^/(.*)$  https://www.gofluent.com$request_uri? permanent;
+    }
+        ##################### HTML REWRITING #####################
+        subs_filter_types   application/x-javascript;
+        subs_filter         'portal.gofluent.com' '$host';
+        subs_filter         'resources.gofluent.com' '$host';
+       # subs_filter         'classroom.gofluent.com' '$host';
+        subs_filter         'http://$host' 'https://$host';
+#### Each domains that can be available on the reverse proxy have to be added here ###
+        subs_filter         'http://217.117.152.90' 'https://reverse.gofluent.com';
+        subs_filter         'http://reverse.gofluent.com' 'https://reverse.gofluent.com';
+        subs_filter         'http://jp.gofluent.com' 'https://jp.gofluent.com';
+        subs_filter         'http://kr.gofluent.com' 'https://kr.gofluent.com';
+        subs_filter         'http://cn.gofluent.com' 'https://cn.gofluent.com';
+        subs_filter         'http://asia.gofluent.com' 'https://asia.gofluent.com';
+        subs_filter         'http://psaportal.gofluent.com' 'https://psaportal.gofluent.com';
+        subs_filter         'http://timportal.gofluent.com' 'https://timportal.gofluent.com';
+        subs_filter         'http://trainers.gofluent.com' 'https://trainers.gofluent.com';
+#### !Each domains that can be available on the reverse proxy have to be added here ###
+#subs_filter         'document.domain = "gofluent.com"' 'document.domain = "$host"';
+        subs_filter         '&t=\d{13}' '' r;
+        subs_filter         '&amp;t=\d{13}+' '' r;
+        subs_filter         '\.css;jsessionid=[^"]+"' '.css"' r;
+        subs_filter         '\.js;jsessionid=[^"]+"' '.js"' r;
+        subs_filter         '\.gif;jsessionid=[^"]+"' '.gif"' r;
+        subs_filter         'Image;jsessionid=[^"]+\?' 'Image?' r;
+        subs_filter         'jsvar=' 'jsvar="";//';
+#       subs_filter         'http://psaportal.gofluent.com/group/client' 'https://psaportal.gofluent.com/group/client' r;
+#        subs_filter         'http://psaportal.gofluent.com/web/guest' 'https://psaportal.gofluent.com/web/guest' r;
+#       subs_filter         'psapsa' 'psa' r;
+#       subs_filter         'http://' 'https://' r;
+        ##################### !HTML REWRITING #####################
+           root /usr/local/nginx/html/;
+           error_page 403 404 500 502 503 504 /error/maintenancepage.html;
+                location /maintenancepage.html {
+                   internal;
+                }
+        location / {
+            ##################### PROXY CONFIGURATION #####################
+            proxy_pass      http://portal_gofluent_com;
+            proxy_redirect  http://portal.gofluent.com/ https://$host/;
+            proxy_redirect  http://$host/ https://$host/;
+            proxy_cookie_domain   portal.gofluent.com .gofluent.com;
+            ##################### !PROXY CONFIGURATION #####################
+
+            ####################  NGINX Monitoring ########################
+            location /nginx_status {
+                   stub_status on;
+                   access_log   off;
+                   allow all;
+            }
+            ####################  NGINX Monitoring ########################
+
+            ##################### WEBSOCKET ENABLING #####################
+            location ~* ^/lightstreamer.* {
+                #Specific proxy rewriting rules
+                proxy_pass          https://classroom.gofluent.com;
+                proxy_redirect      https://classroom.gofluent.com/ https://$host/;
+                proxy_cookie_domain classroom.gofluent.com .gofluent.com;
+
+                #Enable websockets
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+            ##################### !WEBSOCKET ENABLING #####################
+
+            ##################### RESOURCES SUBDOMAIN HANDLING #####################
+            #resources.goportal.com
+            location ~* (/vod/|/tts/).* {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://resources_gofluent_com;
+                proxy_redirect        http://resources.gofluent.com/ https://$host/;
+                proxy_cookie_domain   resources.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !RESOURCES SUBDOMAIN HANDLING #####################
+
+            ##################### SCHEDULER SUBDOMAIN HANDLING #####################
+            #scheduler.goportal.com
+            location ~* /Scheduler/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /Scheduler/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerAdmin/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerAdmin/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerTodoList/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerTodoList/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !SCHEDULER SUBDOMAIN HANDLING #####################
+
+
+            #static files
+            location ~* (/(image|images|icons|vcr-chat|img)/|.css|css.jsp|.js|.swf|.gif|.png|.jpg|.ico|.js|.mp4|.mp3) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass  http://portal_gofluent_com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+        }
+    }
+##################################################################################################################
+    server {
+        server_name psaportal.gofluent.com;
+        access_log /usr/local/nginx/logs/access_443.log main;
+        error_log /usr/local/nginx/logs/error_443.log;
+        client_max_body_size 0;
+        client_body_buffer_size 100m;
+        #####################  SERVER CONFIGURATION #####################
+        listen                      443 ssl;
+        ssl_protocols               TLSv1 TLSv1.1 TLSv1.2 SSLv2;
+        ssl_certificate             ssl/www_gofluent_com.pem;
+        ssl_certificate_key         ssl/www_gofluent_com.key;
+        ssl_session_cache           shared:SSL:1m;
+        ssl_ciphers                 HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers   on;
+        ssl_verify_client           off;
+        #####################  !SERVER CONFIGURATION #####################
+
+        ##################### HEADER REWRITING #####################
+        #Debug trace for cache control
+        more_set_headers        "X-Cache: $upstream_cache_status";
+        #Useless headers cleaning
+        proxy_hide_header       url-regex-pattern;
+        proxy_hide_header       filter-class;
+        more_clear_headers      'Server';
+        #Proxy server configurations
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header        Connection "";
+        proxy_set_header        accept-encoding "";
+        proxy_hide_header       X-Powered-By;
+        proxy_hide_header       Pragma;
+        proxy_hide_header       Vary;
+        proxy_intercept_errors  on;
+        proxy_ignore_client_abort on;
+        ##################### !HEADER REWRITING #####################
+
+        ##################### UPSTREAM HEADER REWRITING #####################
+        more_set_input_headers        "accept-encoding: none";
+        ##################### !UPSTREAM HEADER REWRITING #####################
+
+        ##################### HTML REWRITING #####################
+        subs_filter_types   application/x-javascript;
+        subs_filter         'portal.gofluent.com' '$host';
+        subs_filter         'resources.gofluent.com' '$host';
+       # subs_filter         'classroom.gofluent.com' '$host';
+        subs_filter         'http://$host' 'https://$host';
+#### Each domains that can be available on the reverse proxy have to be added here ###
+        subs_filter         'http://217.117.152.90' 'https://reverse.gofluent.com';
+        subs_filter         'http://reverse.gofluent.com' 'https://reverse.gofluent.com';
+        subs_filter         'http://jp.gofluent.com' 'https://jp.gofluent.com';
+        subs_filter         'http://kr.gofluent.com' 'https://kr.gofluent.com';
+        subs_filter         'http://cn.gofluent.com' 'https://cn.gofluent.com';
+        subs_filter         'http://asia.gofluent.com' 'https://asia.gofluent.com';
+        subs_filter         'http://psaportal.gofluent.com' 'https://psaportal.gofluent.com';
+#### !Each domains that can be available on the reverse proxy have to be added here ###
+#subs_filter         'document.domain = "gofluent.com"' 'document.domain = "$host"';
+        subs_filter         '&t=\d{13}' '' r;
+        subs_filter         '&amp;t=\d{13}+' '' r;
+        subs_filter         '\.css;jsessionid=[^"]+"' '.css"' r;
+        subs_filter         '\.js;jsessionid=[^"]+"' '.js"' r;
+        subs_filter         '\.gif;jsessionid=[^"]+"' '.gif"' r;
+        subs_filter         'Image;jsessionid=[^"]+\?' 'Image?' r;
+        subs_filter         'jsvar=' 'jsvar="";//';
+        subs_filter         'psapsa' 'psa' r;
+        subs_filter         'http://' 'https://' r;
+        subs_filter         'https://10' 'http://10' r;
+        subs_filter         'https://www.w3.org' 'http://www.w3.org' r;
+        ##################### !HTML REWRITING #####################
+           root /usr/local/nginx/html/;
+           error_page 403 404 500 502 503 504 /error/maintenancepage.html;
+                location /maintenancepage.html {
+                   internal;
+                }
+        location / {
+            ##################### PROXY CONFIGURATION #####################
+            proxy_pass      http://psaportal_gofluent_com;
+            proxy_redirect  http://psaportal.gofluent.com/ https://$host/;
+            proxy_redirect  http://$host/ https://$host/;
+            proxy_cookie_domain   psaportal.gofluent.com .gofluent.com;
+            ##################### !PROXY CONFIGURATION #####################
+
+            ####################  NGINX Monitoring ########################
+            location /nginx_status {
+                   stub_status on;
+                   access_log   off;
+                   allow all;
+            }
+            ####################  NGINX Monitoring ########################
+
+            ##################### WEBSOCKET ENABLING #####################
+            location ~* ^/lightstreamer.* {
+                #Specific proxy rewriting rules
+                proxy_pass          https://classroom.gofluent.com;
+                proxy_redirect      https://classroom.gofluent.com/ https://$host/;
+                proxy_cookie_domain classroom.gofluent.com .gofluent.com;
+
+                #Enable websockets
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+            ##################### !WEBSOCKET ENABLING #####################
+
+            ##################### RESOURCES SUBDOMAIN HANDLING #####################
+            #resources.goportal.com
+            location ~* (/vod/|/tts/).* {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://resources_gofluent_com;
+                proxy_redirect        http://resources.gofluent.com/ https://$host/;
+                proxy_cookie_domain   resources.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !RESOURCES SUBDOMAIN HANDLING #####################
+
+            ##################### SCHEDULER SUBDOMAIN HANDLING #####################
+            #scheduler.goportal.com
+            location ~* /Scheduler/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /Scheduler/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerAdmin/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerAdmin/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerTodoList/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerTodoList/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !SCHEDULER SUBDOMAIN HANDLING #####################
+
+
+            #static files
+            location ~* (/(image|images|icons|vcr-chat|img)/|.css|css.jsp|.js|.swf|.gif|.png) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass  http://portal_gofluent_com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+        }
+    }
+
+
+            server {
+        server_name trainers.gofluent.com;
+        access_log /usr/local/nginx/logs/access_443.log main;
+        error_log /usr/local/nginx/logs/error_443.log;
+        client_max_body_size 0;
+        client_body_buffer_size 100m;
+        #####################  SERVER CONFIGURATION #####################
+        listen                      443 ssl;
+        ssl_protocols               TLSv1 TLSv1.1 TLSv1.2 SSLv2;
+        ssl_certificate             ssl/www_gofluent_com.pem;
+        ssl_certificate_key         ssl/www_gofluent_com.key;
+        ssl_session_cache           shared:SSL:1m;
+        ssl_ciphers                 HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers   on;
+        ssl_verify_client           off;
+        #####################  !SERVER CONFIGURATION #####################
+
+        ##################### HEADER REWRITING #####################
+        #Debug trace for cache control
+        more_set_headers        "X-Cache: $upstream_cache_status";
+        #Useless headers cleaning
+        proxy_hide_header       url-regex-pattern;
+        proxy_hide_header       filter-class;
+        more_clear_headers      'Server';
+        #Proxy server configurations
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header        Connection "";
+        proxy_set_header        accept-encoding "";
+        proxy_hide_header       X-Powered-By;
+        proxy_hide_header       Pragma;
+        proxy_hide_header       Vary;
+        proxy_intercept_errors  on;
+        proxy_ignore_client_abort on;
+        ##################### !HEADER REWRITING #####################
+
+        ##################### UPSTREAM HEADER REWRITING #####################
+        more_set_input_headers        "accept-encoding: none";
+        ##################### !UPSTREAM HEADER REWRITING #####################
+
+        ##################### HTML REWRITING #####################
+        subs_filter_types   application/x-javascript;
+        subs_filter         'portal.gofluent.com' '$host';
+        subs_filter         'resources.gofluent.com' '$host';
+       # subs_filter         'classroom.gofluent.com' '$host';
+        subs_filter         'http://$host' 'https://$host';
+#### Each domains that can be available on the reverse proxy have to be added here ###
+        subs_filter         'http://217.117.152.90' 'https://reverse.gofluent.com';
+        subs_filter         'http://reverse.gofluent.com' 'https://reverse.gofluent.com';
+        subs_filter         'http://jp.gofluent.com' 'https://jp.gofluent.com';
+        subs_filter         'http://kr.gofluent.com' 'https://kr.gofluent.com';
+        subs_filter         'http://cn.gofluent.com' 'https://cn.gofluent.com';
+        subs_filter         'http://asia.gofluent.com' 'https://asia.gofluent.com';
+        subs_filter         'http://trainers.gofluent.com' 'https://trainers.gofluent.com';
+#### !Each domains that can be available on the reverse proxy have to be added here ###
+#subs_filter         'document.domain = "gofluent.com"' 'document.domain = "$host"';
+        subs_filter         '&t=\d{13}' '' r;
+        subs_filter         '&amp;t=\d{13}+' '' r;
+        subs_filter         '\.css;jsessionid=[^"]+"' '.css"' r;
+        subs_filter         '\.js;jsessionid=[^"]+"' '.js"' r;
+        subs_filter         '\.gif;jsessionid=[^"]+"' '.gif"' r;
+        subs_filter         'Image;jsessionid=[^"]+\?' 'Image?' r;
+        subs_filter         'jsvar=' 'jsvar="";//';
+        subs_filter         'psapsa' 'psa' r;
+        subs_filter         'http://' 'https://' r;
+        subs_filter         'https://10' 'http://10' r;
+        subs_filter         'https://www.w3.org' 'http://www.w3.org' r;
+        ##################### !HTML REWRITING #####################
+           root /usr/local/nginx/html/;
+           error_page 403 404 500 502 503 504 /error/maintenancepage.html;
+                location /maintenancepage.html {
+                   internal;
+                }
+        location / {
+            ##################### PROXY CONFIGURATION #####################
+            proxy_pass      http://trainers_gofluent_com;
+            proxy_redirect  http://trainers.gofluent.com/ https://$host/;
+            proxy_redirect  http://$host/ https://$host/;
+            proxy_cookie_domain   trainers.gofluent.com .gofluent.com;
+            ##################### !PROXY CONFIGURATION #####################
+
+            ####################  NGINX Monitoring ########################
+            location /nginx_status {
+                   stub_status on;
+                   access_log   off;
+                   allow all;
+            }
+            ####################  NGINX Monitoring ########################
+
+            ##################### WEBSOCKET ENABLING #####################
+            location ~* ^/lightstreamer.* {
+                #Specific proxy rewriting rules
+                proxy_pass          https://classroom.gofluent.com;
+                proxy_redirect      https://classroom.gofluent.com/ https://$host/;
+                proxy_cookie_domain classroom.gofluent.com .gofluent.com;
+
+                #Enable websockets
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+            ##################### !WEBSOCKET ENABLING #####################
+
+            ##################### RESOURCES SUBDOMAIN HANDLING #####################
+            #resources.goportal.com
+            location ~* (/vod/|/tts/).* {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://resources_gofluent_com;
+                proxy_redirect        http://resources.gofluent.com/ https://$host/;
+                proxy_cookie_domain   resources.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !RESOURCES SUBDOMAIN HANDLING #####################
+
+            ##################### SCHEDULER SUBDOMAIN HANDLING #####################
+            #scheduler.goportal.com
+            location ~* /Scheduler/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /Scheduler/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerAdmin/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerAdmin/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerTodoList/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerTodoList/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !SCHEDULER SUBDOMAIN HANDLING #####################
+
+
+            #static files
+            location ~* (/(image|images|icons|vcr-chat|img)/|.css|css.jsp|.js|.swf|.gif|.png) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass  http://trainers_gofluent_com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+        }
+    }
+
+        server {
+        server_name timportal.gofluent.com;
+        access_log /usr/local/nginx/logs/access_443.log main;
+        error_log /usr/local/nginx/logs/error_443.log;
+        client_max_body_size 0;
+        client_body_buffer_size 100m;
+        #####################  SERVER CONFIGURATION #####################
+        listen                      443 ssl;
+        ssl_protocols               TLSv1 TLSv1.1 TLSv1.2 SSLv2;
+        ssl_certificate             ssl/www_gofluent_com.pem;
+        ssl_certificate_key         ssl/www_gofluent_com.key;
+        ssl_session_cache           shared:SSL:1m;
+        ssl_ciphers                 HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers   on;
+        ssl_verify_client           off;
+        #####################  !SERVER CONFIGURATION #####################
+
+        ##################### HEADER REWRITING #####################
+        #Debug trace for cache control
+        more_set_headers        "X-Cache: $upstream_cache_status";
+        #Useless headers cleaning
+        proxy_hide_header       url-regex-pattern;
+        proxy_hide_header       filter-class;
+        more_clear_headers      'Server';
+        #Proxy server configurations
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header        Connection "";
+        proxy_set_header        accept-encoding "";
+        proxy_hide_header       X-Powered-By;
+        proxy_hide_header       Pragma;
+        proxy_hide_header       Vary;
+        proxy_intercept_errors  on;
+        proxy_ignore_client_abort on;
+        ##################### !HEADER REWRITING #####################
+
+        ##################### UPSTREAM HEADER REWRITING #####################
+        more_set_input_headers        "accept-encoding: none";
+        ##################### !UPSTREAM HEADER REWRITING #####################
+
+        ##################### HTML REWRITING #####################
+        subs_filter_types   application/x-javascript;
+        subs_filter         'portal.gofluent.com' '$host';
+        subs_filter         'resources.gofluent.com' '$host';
+       # subs_filter         'classroom.gofluent.com' '$host';
+        subs_filter         'http://$host' 'https://$host';
+#### Each domains that can be available on the reverse proxy have to be added here ###
+        subs_filter         'http://217.117.152.90' 'https://reverse.gofluent.com';
+        subs_filter         'http://reverse.gofluent.com' 'https://reverse.gofluent.com';
+        subs_filter         'http://jp.gofluent.com' 'https://jp.gofluent.com';
+        subs_filter         'http://kr.gofluent.com' 'https://kr.gofluent.com';
+        subs_filter         'http://cn.gofluent.com' 'https://cn.gofluent.com';
+        subs_filter         'http://asia.gofluent.com' 'https://asia.gofluent.com';
+        subs_filter         'http://timportal.gofluent.com' 'https://timportal.gofluent.com';
+#### !Each domains that can be available on the reverse proxy have to be added here ###
+#subs_filter         'document.domain = "gofluent.com"' 'document.domain = "$host"';
+        subs_filter         '&t=\d{13}' '' r;
+        subs_filter         '&amp;t=\d{13}+' '' r;
+        subs_filter         '\.css;jsessionid=[^"]+"' '.css"' r;
+        subs_filter         '\.js;jsessionid=[^"]+"' '.js"' r;
+        subs_filter         '\.gif;jsessionid=[^"]+"' '.gif"' r;
+        subs_filter         'Image;jsessionid=[^"]+\?' 'Image?' r;
+        subs_filter         'jsvar=' 'jsvar="";//';
+        subs_filter         'timtim' 'tim' r;
+        subs_filter         'http://' 'https://' r;
+        subs_filter         'https://10' 'http://10' r;
+        subs_filter         'https://www.w3.org' 'http://www.w3.org' r;
+        ##################### !HTML REWRITING #####################
+           root /usr/local/nginx/html/;
+           error_page 403 404 500 502 503 504 /error/maintenancepage.html;
+                location /maintenancepage.html {
+                   internal;
+                }
+        location / {
+            ##################### PROXY CONFIGURATION #####################
+            proxy_pass      http://timportal_gofluent_com;
+            proxy_redirect  http://timportal.gofluent.com/ https://$host/;
+            proxy_redirect  http://$host/ https://$host/;
+            proxy_cookie_domain   timportal.gofluent.com .gofluent.com;
+            ##################### !PROXY CONFIGURATION #####################
+
+            ####################  NGINX Monitoring ########################
+            location /nginx_status {
+                   stub_status on;
+                   access_log   off;
+                   allow all;
+            }
+            ####################  NGINX Monitoring ########################
+
+            ##################### WEBSOCKET ENABLING #####################
+            location ~* ^/lightstreamer.* {
+                #Specific proxy rewriting rules
+                proxy_pass          https://classroom.gofluent.com;
+                proxy_redirect      https://classroom.gofluent.com/ https://$host/;
+                proxy_cookie_domain classroom.gofluent.com .gofluent.com;
+
+                #Enable websockets
+                proxy_set_header Upgrade $http_upgrade;
+                proxy_set_header Connection "upgrade";
+            }
+            ##################### !WEBSOCKET ENABLING #####################
+
+            ##################### RESOURCES SUBDOMAIN HANDLING #####################
+            #resources.goportal.com
+            location ~* (/vod/|/tts/).* {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://resources_gofluent_com;
+                proxy_redirect        http://resources.gofluent.com/ https://$host/;
+                proxy_cookie_domain   resources.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !RESOURCES SUBDOMAIN HANDLING #####################
+
+            ##################### SCHEDULER SUBDOMAIN HANDLING #####################
+            #scheduler.goportal.com
+            location ~* /Scheduler/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /Scheduler/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerAdmin/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerAdmin/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                location ~* /SchedulerTodoList/.*\.(faces) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+            location ~* /SchedulerTodoList/.*(Image|\.(css|js|gif|jpg|png)) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://scheduler_gofluent_com;
+                proxy_redirect        http://scheduler.gofluent.com/ https://$host/;
+                proxy_redirect        http://$host/ https://$host/;
+                proxy_cookie_domain   scheduler.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !SCHEDULER SUBDOMAIN HANDLING #####################
+
+
+            #static files
+            location ~* (/(image|images|icons|vcr-chat|img)/|.css|css.jsp|.js|.swf|.gif|.png) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass  http://portal_gofluent_com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+        }
+    }
+##################################################################################################################
+    server {
+        server_name www.gofluent.com;
+        server_name gofluent.com;
+        server_name www.gofluent.asia;
+        server_name gofluent.asia;
+        server_name www.gofluent.at;
+        server_name gofluent.at;
+        server_name www.gofluent.be;
+        server_name gofluent.be;
+        server_name www.gofluent.sg;
+        server_name gofluent.sg;
+        server_name www.gofluent.eu;
+        server_name gofluent.eu;
+        server_name www.gofluent.lu;
+        server_name gofluent.lu;
+        server_name www.gofluent.net;
+        server_name gofluent.net;
+        server_name www.gofluent.org;
+        server_name gofluent.org;
+        server_name www.gofluent.pl;
+        server_name gofluent.pl;
+        server_name www.gofluent.ch;
+        server_name gofluent.ch;
+        server_name www.gofluent.de;
+        server_name gofluent.de;
+        server_name www.gofluent.es;
+        server_name gofluent.es;
+        server_name www.gofluent.fr;
+        server_name gofluent.fr;
+        server_name www.gofluent.hk;
+        server_name gofluent.hk;
+        server_name www.gofluent.it;
+        server_name gofluent.it;
+        server_name www.gofluent.jp;
+        server_name gofluent.jp;
+        server_name www.gofluent.kr;
+        server_name gofluent.kr;
+        server_name www.gofluent.mx;
+        server_name gofluent.mx;
+        server_name www.gofluent.ph;
+        server_name gofluent.ph;
+        server_name www.gofluent.ru;
+        server_name gofluent.ru;
+        server_name www.gofluent.us;
+        server_name gofluent.us;
+        server_name www.gofluent.br;
+        server_name gofluent.br;
+        server_name www.gofluent.tk;
+        server_name gofluent.tk;
+        server_name www.gofluent.com.tr;
+        server_name gofluent.com.tr;
+
+        access_log /usr/local/nginx/logs/access-multi.log main;
+        error_log /usr/local/nginx/logs/error-multi.log;
+                client_max_body_size 0;
+        client_body_buffer_size 100m;
+
+        #####################  SERVER CONFIGURATION #####################
+                listen                      80;
+        #####################  !SERVER CONFIGURATION #####################
+        listen                      443 ssl;
+        ssl_protocols               TLSv1 TLSv1.1 TLSv1.2 SSLv2;
+        ssl_certificate             ssl/www_gofluent_com.pem;
+        ssl_certificate_key         ssl/www_gofluent_com.key;
+        ssl_session_cache           shared:SSL:1m;
+        ssl_ciphers                 HIGH:!aNULL:!MD5;
+        ssl_prefer_server_ciphers   on;
+        ssl_verify_client           off;
+
+
+        ##################### HEADER REWRITING #####################
+        #Debug trace for cache control
+        more_set_headers        "X-Cache: $upstream_cache_status";
+        #Useless headers cleaning
+        proxy_hide_header       url-regex-pattern;
+        proxy_hide_header       filter-class;
+        more_clear_headers      'Server';
+        #Proxy server configurations
+        proxy_set_header        Host            $host;
+        proxy_set_header        X-Real-IP       $remote_addr;
+        proxy_set_header        X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header        Connection "";
+        proxy_set_header        accept-encoding "";
+        proxy_hide_header       X-Powered-By;
+        proxy_hide_header       Pragma;
+        proxy_hide_header       Vary;
+        proxy_intercept_errors  on;
+        proxy_ignore_client_abort on;
+        ##################### !HEADER REWRITING #####################
+        ##################### HTML REWRITING #####################
+        subs_filter_types   application/x-javascript;
+
+        subs_filter         'www.gofluent.com' '$host';
+       #subs_filter         'http://$host' 'http://$host';
+        subs_filter         '&t=\d{13}' '' r;
+        subs_filter         '&amp;t=\d{13}+' '' r;
+        subs_filter         '\.css;jsessionid=[^"]+"' '.css"' r;
+        subs_filter         '\.js;jsessionid=[^"]+"' '.js"' r;
+        subs_filter         '\.gif;jsessionid=[^"]+"' '.gif"' r;
+        subs_filter         'Image;jsessionid=[^"]+\?' 'Image?' r;
+        subs_filter         'jsvar=' 'jsvar="";//';
+        ##################### !HTML REWRITING #####################
+           root /usr/local/nginx/html/;
+           error_page 403 404 500 502 503 504 /error/maintenancepage.html;
+                location /maintenancepage.html {
+                   internal;
+                }
+       location / {
+            ##################### PROXY CONFIGURATION #####################
+            proxy_pass      http://www.gofluent.com;
+            proxy_redirect  http://www.gofluent.com/ http://$host/;
+            proxy_redirect  http://$host/ http://$host/;
+            proxy_cookie_domain   www.gofluent.com .gofluent.com;
+            ##################### !PROXY CONFIGURATION #####################
+            ##################### MULTISITE SUBDOMAIN HANDLING #####################
+            location ~* /GoFluent/.* {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com;
+                proxy_redirect        http://www.gofluent.com/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            location ~* /GoFluent/(/js/|/images/).* {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com;
+                proxy_redirect        http://www.gofluent.com/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+            }
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+           }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Brazil SUBDOMAIN HANDLING #####################
+            location /br-pt {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/br-pt;
+                proxy_redirect        http://www.gofluent.com/br-pt http://$host/br-pt;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                        ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+                        ##################### !Canada SUBDOMAIN HANDLING #####################
+                        location /ca-en {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/ca-en;
+                proxy_redirect        http://www.gofluent.com/ca-en http://$host/ca-en;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !China SUBDOMAIN HANDLING #####################
+            location /cn-zn {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/cn-zn;
+                proxy_redirect        http://www.gofluent.com/cn-zn http://$host/cn-zn;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+                        ##################### !France SUBDOMAIN HANDLING #####################
+                        location /fr-fr {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/fr-fr;
+                proxy_redirect        http://www.gofluent.com/fr-fr http://$host/fr-fr;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+                        ##################### !Germany SUBDOMAIN HANDLING #####################
+            location /de-de {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/de-de;
+                proxy_redirect        http://www.gofluent.com/de-de http://$host/de-de;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !HongKong SUBDOMAIN HANDLING #####################
+            location /hk-tw {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/hk-tw;
+                proxy_redirect        http://www.gofluent.com/hk-tw http://$host/hk-tw;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Italy SUBDOMAIN HANDLING #####################
+            location /it-it {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/it-it;
+                proxy_redirect        http://www.gofluent.com/it-it http://$host/it-it;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Japan SUBDOMAIN HANDLING #####################
+            location /jp-jp {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/jp-jp;
+                proxy_redirect        http://www.gofluent.com/jp-jp http://$host/jp-jp;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Korea SUBDOMAIN HANDLING #####################
+            location /kr-ko {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/kr-ko;
+                proxy_redirect        http://www.gofluent.com/kr-ko http://$host/kr-ko;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Mexico SUBDOMAIN HANDLING #####################
+            location /mx-es {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/mx-es;
+                proxy_redirect        http://www.gofluent.com/mx-es http://$host/mx-es;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !Philippines SUBDOMAIN HANDLING #####################
+
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+            location /ph-en {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/ph-en;
+                proxy_redirect        http://www.gofluent.com/ph-en http://$host/ph-en;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Russia SUBDOMAIN HANDLING #####################
+            location /ru-ru {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/ru-ru;
+                proxy_redirect        http://www.gofluent.com/ru-ru http://$host/ru-ru;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Spain SUBDOMAIN HANDLING #####################
+            location /es-es {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/es-es;
+                proxy_redirect        http://www.gofluent.com/es-es http://$host/es-es;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Switzerland SUBDOMAIN HANDLING #####################
+            location /ch-fr {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/ch-fr;
+                proxy_redirect        http://www.gofluent.com/ch-fr http://$host/ch-fr;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !Turkey SUBDOMAIN HANDLING #####################
+            location /tr-tr {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/tr-tr;
+                proxy_redirect        http://www.gofluent.com/tr-tr http://$host/tr-tr;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !UAE SUBDOMAIN HANDLING #####################
+            location /ae-en {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/ae-en;
+                proxy_redirect        http://www.gofluent.com/ae-en http://$host/ae-en;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+                        ##################### !US SUBDOMAIN HANDLING ####################
+            location /us-en {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/us-en;
+                proxy_redirect        http://www.gofluent.com/us-en http://$host/us-en;
+                proxy_redirect        http://$host/ http://$host/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+                        ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            ##################### !BLOG SUBDOMAIN HANDLING #####################
+            location /blog/ {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/blog/;
+                proxy_redirect        http://www.gofluent.com/blog/ http://www.gofluent.com/blog/;
+                proxy_redirect        http://$host/blog/ http://www.gofluent.com/blog/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+            location /BLOG/ {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/blog/;
+                proxy_redirect        http://www.gofluent.com/blog/ http://www.gofluent.com/blog/;
+                proxy_redirect        http://$host/blog/ http://www.gofluent.com/blog/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+
+            location /iaap/ {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass          http://www.gofluent.com/iaap/;
+                proxy_redirect        http://www.gofluent.com/iaap/ http://www.gofluent.com/iaap/;
+                proxy_redirect        http://$host/iaap/ http://www.gofluent.com/iaap/;
+                proxy_cookie_domain   www.gofluent.com .gofluent.com;
+
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 8h;
+                expires 8h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+             }
+
+                        ##################### !MULTISITE SUBDOMAIN HANDLING #####################
+
+            #static files
+            location ~* (/(image|images|icons|vcr-chat|img)/|.css|css.jsp|.js|.swf|.gif|.png) {
+                ##################### PROXY CONFIGURATION #####################
+                proxy_pass  http://www.gofluent.com;
+                ##################### !PROXY CONFIGURATION #####################
+
+                ##################### CACHE HEADER CONFIGURATION #####################
+                more_clear_headers  'Expires';
+                more_set_headers    "Cache-Control: max-age=28800, public";
+                ##################### CACHE HEADER CONFIGURATION #####################
+
+                ##################### SERVER CACHE CONFIGURATION #####################
+                proxy_cache my-cache;
+                proxy_cache_valid 200 404 24h;
+                expires 24h;
+                proxy_cache_use_stale      updating; #Send outdated cache version if server update is in progress
+                proxy_ignore_headers        Expires Cache-Control;
+                ##################### !SERVER CACHE CONFIGURATION #####################
+            }
+        }
+    }
+
+    server {
+        listen      80 default;
+        server_name portal.gofluent.com psaportal.gofluent.com timportal.gofluent.com trainers.gofluent.com;
+        #server_name proxy;
+        ## redirect http to https ##
+        rewrite        ^ https://$host$request_uri? permanent;
+        # rewrite        ^ https://asia.gofluent.com$request_uri? permanent;
+        #rewrite        ^ https://reverse.gofluent.com$request_uri? permanent;
+            root /usr/local/nginx/html/;
+            error_page 403 404 500 502 503 504 /error/maintenancepage.html;
+                location /maintenancepage.html {
+                   internal;
+                }
+    }
+}
